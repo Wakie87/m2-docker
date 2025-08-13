@@ -14,8 +14,6 @@ services:
       - ./volumes/magento/media:/var/www/html/pub/media:ro
     depends_on:
       - php-fpm
-    networks:
-      - m2-network
     restart: unless-stopped
     deploy:
       resources:
@@ -40,11 +38,10 @@ services:
       - XDEBUG_PORT=${XDEBUG_PORT:-9003}
     depends_on:
       - mariadb
-      - redis
+      - redis-cache
+      - redis-sessions
       - rabbitmq
       - opensearch
-    networks:
-      - m2-network
     restart: unless-stopped
     deploy:
       resources:
@@ -64,11 +61,10 @@ services:
       - PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-1800}
     depends_on:
       - mariadb
-      - redis
+      - redis-cache
+      - redis-sessions
       - rabbitmq
       - opensearch
-    networks:
-      - m2-network
     restart: unless-stopped
     command: >
       sh -c "
@@ -95,11 +91,10 @@ services:
       - PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-1800}
     depends_on:
       - mariadb
-      - redis
+      - redis-cache
+      - redis-sessions
       - rabbitmq
       - opensearch
-    networks:
-      - m2-network
     restart: unless-stopped
     command: >
       sh -c "
@@ -123,8 +118,6 @@ services:
       - VARNISH_SIZE=${VARNISH_SIZE:-2G}
     depends_on:
       - nginx
-    networks:
-      - m2-network
     restart: unless-stopped
     deploy:
       resources:
@@ -143,10 +136,8 @@ services:
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${SERVICE_PASSWORD_MYSQL}
     volumes:
-      - ${MYSQL_DATA_PATH:-./volumes/mysql}:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
       - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf:ro
-    networks:
-      - m2-network
     restart: unless-stopped
     deploy:
       resources:
@@ -166,7 +157,7 @@ services:
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx${OPENSEARCH_MEMORY_LIMIT:-2G}"
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${SERVICE_PASSWORD_OPENSEARCH}
     volumes:
-      - ${OPENSEARCH_DATA_PATH:-./volumes/opensearch}:/usr/share/opensearch/data
+      - opensearch_data:/usr/share/opensearch/data
     ulimits:
       memlock:
         soft: -1
@@ -174,30 +165,41 @@ services:
       nofile:
         soft: 65536
         hard: 65536
-    networks:
-      - m2-network
     restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: ${OPENSEARCH_MEMORY_LIMIT:-2G}
 
-  # Redis Cache
-  redis:
+  # Redis Cache (for Magento cache)
+  redis-cache:
     image: redis:7.0-alpine
-    container_name: m2-redis
+    container_name: m2-redis-cache
     ports:
-      - "${REDIS_PORT:-6379}:6379"
-    command: redis-server --appendonly yes --requirepass ${SERVICE_PASSWORD_REDIS}
+      - "${REDIS_CACHE_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --requirepass ${SERVICE_PASSWORD_REDIS_CACHE}
     volumes:
-      - ./volumes/redis:/data
-    networks:
-      - m2-network
+      - redis_cache_data:/data
     restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: ${REDIS_MEMORY_LIMIT:-256M}
+          memory: ${REDIS_CACHE_MEMORY_LIMIT:-512M}
+
+  # Redis Sessions (for Magento sessions)
+  redis-sessions:
+    image: redis:7.0-alpine
+    container_name: m2-redis-sessions
+    ports:
+      - "${REDIS_SESSIONS_PORT:-6380}:6379"
+    command: redis-server --appendonly yes --requirepass ${SERVICE_PASSWORD_REDIS_SESSIONS}
+    volumes:
+      - redis_sessions_data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_SESSIONS_MEMORY_LIMIT:-256M}
 
   # RabbitMQ Message Queue
   rabbitmq:
@@ -210,9 +212,7 @@ services:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${SERVICE_PASSWORD_RABBITMQ}
     volumes:
-      - ./volumes/rabbitmq:/var/lib/rabbitmq
-    networks:
-      - m2-network
+      - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
     deploy:
       resources:
@@ -226,20 +226,16 @@ services:
     ports:
       - "${MAILHOG_PORT:-1025}:1025"
       - "${MAILHOG_WEB_PORT:-8025}:8025"
-    networks:
-      - m2-network
     restart: unless-stopped
-
-networks:
-  m2-network:
-    driver: bridge
 
 volumes:
   mysql_data:
     driver: local
   opensearch_data:
     driver: local
-  redis_data:
+  redis_cache_data:
+    driver: local
+  redis_sessions_data:
     driver: local
   rabbitmq_data:
     driver: local

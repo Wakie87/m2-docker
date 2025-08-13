@@ -1,0 +1,256 @@
+version: '3.8'
+
+services:
+  # Nginx Web Server
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: m2-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./volumes/magento:/var/www/html:ro
+      - ./volumes/magento/media:/var/www/html/pub/media:ro
+    depends_on:
+      - php-fpm
+      - varnish
+    networks:
+      - m2-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${NGINX_MEMORY_LIMIT:-256M}
+
+  # PHP-FPM 8.3
+  php-fpm:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: m2-php-fpm
+    volumes:
+      - ./volumes/magento:/var/www/html
+      - ./volumes/magento/media:/var/www/html/pub/media
+      - ./volumes/magento/var:/var/www/html/var
+    environment:
+      - PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-2G}
+      - PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-1800}
+      - PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE:-64M}
+      - PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE:-64M}
+      - XDEBUG_ENABLED=${XDEBUG_ENABLED:-false}
+      - XDEBUG_HOST=${XDEBUG_HOST:-host.docker.internal}
+      - XDEBUG_PORT=${XDEBUG_PORT:-9003}
+    depends_on:
+      - mariadb
+      - redis
+      - rabbitmq
+      - opensearch
+    networks:
+      - m2-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${PHP_MEMORY_LIMIT_CONTAINER:-1G}
+
+  # PHP Cron Container
+  php-cron:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: m2-php-cron
+    volumes:
+      - ./volumes/magento:/var/www/html
+      - ./volumes/magento/media:/var/www/html/pub/media
+      - ./volumes/magento/var:/var/www/html/var
+    environment:
+      - PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-2G}
+      - PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-1800}
+    depends_on:
+      - mariadb
+      - redis
+      - rabbitmq
+      - opensearch
+    networks:
+      - m2-network
+    restart: unless-stopped
+    command: >
+      sh -c "
+        while true; do
+          cd /var/www/html && php bin/magento cron:run
+          sleep 60
+        done
+      "
+    deploy:
+      resources:
+        limits:
+          memory: ${PHP_MEMORY_LIMIT_CONTAINER:-1G}
+
+  # Queue Consumer Container
+  queue-consumer:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: m2-queue-consumer
+    volumes:
+      - ./volumes/magento:/var/www/html
+      - ./volumes/magento/media:/var/www/html/pub/media
+      - ./volumes/magento/var:/var/www/html/var
+    environment:
+      - PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-2G}
+      - PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-1800}
+    depends_on:
+      - mariadb
+      - redis
+      - rabbitmq
+      - opensearch
+    networks:
+      - m2-network
+    restart: unless-stopped
+    command: >
+      sh -c "
+        cd /var/www/html && 
+        php bin/magento queue:consumers:start async.operations.all --max-messages=${QUEUE_CONSUMER_MAX_MESSAGES:-1000}
+      "
+    deploy:
+      resources:
+        limits:
+          memory: ${PHP_MEMORY_LIMIT_CONTAINER:-1G}
+
+  # Varnish Cache
+  varnish:
+    image: varnish:7.3-alpine
+    container_name: m2-varnish
+    ports:
+      - "${VARNISH_PORT:-6081}:80"
+    volumes:
+      - ./docker/varnish/default.vcl:/etc/varnish/default.vcl:ro
+    environment:
+      - VARNISH_SIZE=${VARNISH_SIZE:-2G}
+    depends_on:
+      - nginx
+    networks:
+      - m2-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${VARNISH_MEMORY_LIMIT:-512M}
+
+  # MariaDB Database
+  mariadb:
+    image: mariadb:10.6-focal
+    container_name: m2-mariadb
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${SERVICE_PASSWORD_MYSQL}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${SERVICE_PASSWORD_MYSQL}
+    volumes:
+      - ${MYSQL_DATA_PATH:-./volumes/mysql}:/var/lib/mysql
+      - ./docker/mariadb/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    networks:
+      - m2-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${MARIADB_MEMORY_LIMIT:-1G}
+
+  # OpenSearch
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: m2-opensearch
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+      - "${OPENSEARCH_PORT_SSL:-9300}:9300"
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx${OPENSEARCH_MEMORY_LIMIT:-2G}"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${SERVICE_PASSWORD_OPENSEARCH}
+    volumes:
+      - ${OPENSEARCH_DATA_PATH:-./volumes/opensearch}:/usr/share/opensearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      - m2-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${OPENSEARCH_MEMORY_LIMIT:-2G}
+
+  # Redis Cache
+  redis:
+    image: redis:7.2-alpine
+    container_name: m2-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --requirepass ${SERVICE_PASSWORD_REDIS}
+    volumes:
+      - ./volumes/redis:/data
+    networks:
+      - m2-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY_LIMIT:-256M}
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: m2-rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${SERVICE_PASSWORD_RABBITMQ}
+    volumes:
+      - ./volumes/rabbitmq:/var/lib/rabbitmq
+    networks:
+      - m2-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${RABBITMQ_MEMORY_LIMIT:-512M}
+
+  # Mailhog for Email Testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: m2-mailhog
+    ports:
+      - "${MAILHOG_PORT:-1025}:1025"
+      - "${MAILHOG_WEB_PORT:-8025}:8025"
+    networks:
+      - m2-network
+    restart: unless-stopped
+
+networks:
+  m2-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+  opensearch_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  magento_media:
+    driver: local
+  magento_var:
+    driver: local

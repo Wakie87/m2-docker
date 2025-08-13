@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./volumes/magento:/var/www/html:ro
+      - ./volumes/magento/media:/var/www/html/pub/media:ro
+
+  varnish:
+    ports:
+      - "6081:80"
+
+  mariadb:
+    ports:
+      - "3306:3306"
+
+  opensearch:
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  mailhog:
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  php-fpm:
+    environment:
+      - XDEBUG_ENABLED=true
+      - XDEBUG_HOST=host.docker.internal
+      - XDEBUG_PORT=9003

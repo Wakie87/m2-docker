@@ -1,0 +1,17 @@
+# Ignore unnecessary files during Docker build
+.git
+.gitignore
+README.md
+*.md
+.env*
+docker-compose*.yml
+Makefile
+scripts/
+volumes/
+node_modules/
+vendor/
+var/
+pub/static/
+pub/media/
+app/etc/env.php
+app/etc/config.php

@@ -24,9 +24,7 @@ services:
 
   # PHP-FPM 8.3
   php-fpm:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
+    image: php:8.3-fpm
     container_name: m2-php-fpm
     volumes:
       - ./volumes/magento:/var/www/html
@@ -55,9 +53,7 @@ services:
 
   # PHP Cron Container
   php-cron:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
+    image: php:8.3-fpm
     container_name: m2-php-cron
     volumes:
       - ./volumes/magento:/var/www/html
@@ -88,9 +84,7 @@ services:
 
   # Queue Consumer Container
   queue-consumer:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
+    image: php:8.3-fpm
     container_name: m2-queue-consumer
     volumes:
       - ./volumes/magento:/var/www/html
@@ -119,7 +113,7 @@ services:
 
   # Varnish Cache
   varnish:
-    image: varnish:7.3-alpine
+    image: varnish:7.2-alpine
     container_name: m2-varnish
     ports:
       - "${VARNISH_PORT:-6081}:80"
@@ -139,7 +133,7 @@ services:
 
   # MariaDB Database
   mariadb:
-    image: mariadb:10.6-focal
+    image: mariadb:10.5
     container_name: m2-mariadb
     ports:
       - "${MYSQL_PORT:-3306}:3306"
@@ -161,7 +155,7 @@ services:
 
   # OpenSearch
   opensearch:
-    image: opensearchproject/opensearch:2.11.0
+    image: opensearchproject/opensearch:2.9.0
     container_name: m2-opensearch
     ports:
       - "${OPENSEARCH_PORT:-9200}:9200"
@@ -190,7 +184,7 @@ services:
 
   # Redis Cache
   redis:
-    image: redis:7.2-alpine
+    image: redis:7.0-alpine
     container_name: m2-redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -207,7 +201,7 @@ services:
 
   # RabbitMQ Message Queue
   rabbitmq:
-    image: rabbitmq:3.12-management-alpine
+    image: rabbitmq:3.11-management-alpine
     container_name: m2-rabbitmq
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"

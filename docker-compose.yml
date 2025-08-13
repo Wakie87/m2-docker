@@ -107,7 +107,8 @@ services:
     image: varnish:7.2-alpine
     container_name: m2-varnish
     volumes:
-      - ./docker/varnish/default.vcl:/etc/varnish/default.vcl:ro
+      - ./docker/varnish/default.vcl:/etc/varnish/custom.vcl:ro
+    command: ["varnishd", "-F", "-f", "/etc/varnish/custom.vcl", "-s", "malloc,${VARNISH_SIZE:-2G}", "-a", "0.0.0.0:80"]
     environment:
       - VARNISH_SIZE=${VARNISH_SIZE:-2G}
     depends_on:

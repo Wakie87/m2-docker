@@ -1,15 +1,9 @@
 FROM varnish:7.2-alpine
 
-# Install additional tools for healthchecks and debugging
-RUN apk add --no-cache \
-    curl \
-    vim \
-    && rm -rf /var/cache/apk/*
-
 # Copy the Varnish configuration
 COPY default.vcl /etc/varnish/default.vcl
 
-# Create a health check script
+# Create a simple health check script
 RUN echo '#!/bin/sh\nvarnishstat -1 > /dev/null' > /usr/local/bin/healthcheck.sh && \
     chmod +x /usr/local/bin/healthcheck.sh
 

@@ -122,8 +122,6 @@ services:
   mariadb:
     image: mariadb:10.5
     container_name: m2-mariadb
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=${SERVICE_PASSWORD_MYSQL}
       - MYSQL_DATABASE=${MYSQL_DATABASE}
@@ -142,9 +140,6 @@ services:
   opensearch:
     image: opensearchproject/opensearch:2.9.0
     container_name: m2-opensearch
-    ports:
-      - "${OPENSEARCH_PORT:-9200}:9200"
-      - "${OPENSEARCH_PORT_SSL:-9300}:9300"
     environment:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
@@ -169,8 +164,6 @@ services:
   redis-cache:
     image: redis:7.0-alpine
     container_name: m2-redis-cache
-    ports:
-      - "${REDIS_CACHE_PORT:-6379}:6379"
     command: redis-server --appendonly yes --requirepass ${SERVICE_PASSWORD_REDIS_CACHE}
     volumes:
       - redis_cache_data:/data
@@ -184,8 +177,6 @@ services:
   redis-sessions:
     image: redis:7.0-alpine
     container_name: m2-redis-sessions
-    ports:
-      - "${REDIS_SESSIONS_PORT:-6380}:6379"
     command: redis-server --appendonly yes --requirepass ${SERVICE_PASSWORD_REDIS_SESSIONS}
     volumes:
       - redis_sessions_data:/data
@@ -199,9 +190,6 @@ services:
   rabbitmq:
     image: rabbitmq:3.11-management-alpine
     container_name: m2-rabbitmq
-    ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${SERVICE_PASSWORD_RABBITMQ}
@@ -217,9 +205,6 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     container_name: m2-mailhog
-    ports:
-      - "${MAILHOG_PORT:-1025}:1025"
-      - "${MAILHOG_WEB_PORT:-8025}:8025"
     restart: unless-stopped
 
 volumes:
